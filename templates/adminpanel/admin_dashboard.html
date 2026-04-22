@@ -1,0 +1,9 @@
+<h2>Admin Dashboard</h2>
+
+<h3>All Users</h3>
+
+{% for user in users %}
+    <p>{{ user.name }} - {{ user.email }}</p>
+{% endfor %}
+
+<a href="{% url 'admin_logout' %}">Logout</a>

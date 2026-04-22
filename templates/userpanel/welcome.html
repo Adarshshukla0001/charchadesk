@@ -1,0 +1,64 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to CharchaDesk</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .typing {
+            border-right: .15em solid #6366f1;
+            white-space: nowrap;
+            overflow: hidden;
+            animation: typing 3s steps(30, end), blink-caret .75s step-end infinite;
+        }
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: #6366f1; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 to-purple-200 min-h-screen flex flex-col items-center justify-center">
+    <div class="flex flex-col items-center justify-center h-screen w-full">
+        <div class="mb-8 animate-spin-slow">
+            <svg class="w-20 h-20 text-indigo-500 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+        </div>
+        <div class="text-3xl md:text-4xl font-bold text-indigo-700 mb-4">
+            <span id="typing-text" class="typing"></span>
+        </div>
+        <div class="mt-4 text-lg text-gray-600 animate-pulse">Loading your dashboard...</div>
+        <audio id="welcome-audio" src="{% static 'userpanel/welcome_voice.mp3' %}" preload="auto"></audio>
+    </div>
+    <script>
+        // Typing animation
+        const text = 'charchadesk me apka swagat hai';
+        let i = 0;
+        const typingText = document.getElementById('typing-text');
+        function typeWriter() {
+            if (i < text.length) {
+                typingText.innerHTML += text.charAt(i);
+                i++;
+                setTimeout(typeWriter, 70);
+            }
+        }
+        typeWriter();
+        // Play welcome audio
+        window.onload = function() {
+            const audio = document.getElementById('welcome-audio');
+            audio.play();
+        };
+        // Redirect after 12 seconds
+        setTimeout(function() {
+            window.location.href = "/dashboard/";
+        }, 12000);
+    </script>
+</body>
+</html>
