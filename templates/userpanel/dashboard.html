@@ -71,9 +71,6 @@
                 {% if u.unread_count > 0 %}
                 <span class="bg-green-500 text-xs px-2 py-0.5 rounded-full">{{ u.unread_count }}</span>
                 {% endif %}
-                {% if u.has_chat %}
-                <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">Chat</span>
-                {% endif %}
                 <!-- ✅ REALTIME STATUS -->
                 <span class="user-status text-xs {% if u.is_online %}text-green-400{% else %}text-slate-500{% endif %}">● {% if u.is_online %}online{% else %}offline{% endif %}</span>
             </div>
@@ -112,8 +109,15 @@
                          class="text-sm text-slate-500 italic h-4"></p>
             </div>
 
-            <!-- MENU -->
-            <div class="relative">
+            <div class="flex items-center gap-2">
+                {% if other_user and other_user.id %}
+                <button id="open-summary-modal" type="button" class="px-3 py-1.5 rounded-lg bg-cyan-600 text-white text-sm font-semibold hover:bg-cyan-700 transition">
+                    Summarize Chat
+                </button>
+                {% endif %}
+
+                <!-- MENU -->
+                <div class="relative">
                 <button id="chat-menu-button" type="button" onclick="toggleMenu(event)">⋮</button>
 
                 <div id="menu"
@@ -131,6 +135,7 @@
                     {% endif %}
 
                 </div>
+            </div>
             </div>
 
         </div>
@@ -293,6 +298,63 @@
     </div>
 
 </div>
+
+{% if other_user and other_user.id %}
+<div id="summary-modal" class="hidden fixed inset-0 z-[70] bg-black/50 p-4">
+    <div class="summary-modal-card mx-auto mt-10 w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-slate-900">Chat Summary Range</h3>
+            <button id="close-summary-modal" type="button" class="h-8 w-8 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">&times;</button>
+        </div>
+
+        <p class="mt-2 text-sm text-slate-500">Choose a quick range or use Advanced datetime.</p>
+
+        <div id="summary-quick-options" class="mt-4 grid grid-cols-2 gap-2 text-sm">
+            <button type="button" class="summary-quick-btn rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50" data-range="last_1_hour">Last 1 Hour</button>
+            <button type="button" class="summary-quick-btn rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50" data-range="last_2_hour">Last 2 Hours</button>
+            <button type="button" class="summary-quick-btn rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50" data-range="last_3_hour">Last 3 Hours</button>
+            <button type="button" class="summary-quick-btn rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50" data-range="today">Today</button>
+            <button type="button" class="summary-quick-btn rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50" data-range="yesterday">Yesterday</button>
+            <button type="button" class="summary-quick-btn rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50" data-range="last_7_days">Last 7 Days</button>
+        </div>
+
+        <div class="mt-4">
+            <label for="summary-language" class="text-sm font-medium text-slate-700">Summary Language</label>
+            <select id="summary-language" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-cyan-400">
+                <option value="English" selected>English</option>
+                <option value="Hindi">Hindi</option>
+            </select>
+        </div>
+
+        <button id="toggle-summary-advanced" type="button" class="mt-4 text-sm font-semibold text-cyan-700 hover:text-cyan-800">Advanced</button>
+
+        <div id="summary-advanced-panel" class="mt-3 hidden space-y-3 rounded-xl border border-slate-200 p-3">
+            <div>
+                <label for="summary-start" class="text-sm font-medium text-slate-700">Start Date & Time</label>
+                <input id="summary-start" type="datetime-local" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-cyan-400">
+            </div>
+            <div>
+                <label for="summary-end" class="text-sm font-medium text-slate-700">End Date & Time</label>
+                <input id="summary-end" type="datetime-local" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-cyan-400">
+            </div>
+        </div>
+
+        <div class="mt-5 flex justify-end">
+            <button id="get-summary-btn" type="button" class="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-700">Get Summary</button>
+        </div>
+    </div>
+</div>
+
+<div id="summary-result-modal" class="hidden fixed inset-0 z-[75] bg-black/55 p-4">
+    <div class="summary-result-card mx-auto mt-16 w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-slate-900">Chat Summary</h3>
+            <button id="close-summary-result" type="button" class="h-8 w-8 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">&times;</button>
+        </div>
+        <div id="summary-result-content" class="mt-4 max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-700"></div>
+    </div>
+</div>
+{% endif %}
 
 <!-- 🔊 SOUND -->
 <audio id="msg-sound" src="{% static 'userpanel/notify.mp3' %}"></audio>

@@ -54,7 +54,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 </div>
                 <div class="flex flex-col items-end gap-1">
                     ${u.unread_count > 0 ? `<span class="bg-green-500 text-xs px-2 py-0.5 rounded-full">${u.unread_count}</span>` : ''}
-                    ${u.has_chat ? `<span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">Chat</span>` : ''}
                     <span class="user-status text-xs ${u.is_online ? 'text-green-400' : 'text-gray-500'}">● ${u.is_online ? 'online' : 'offline'}</span>
                 </div>
             </div>
@@ -396,9 +395,11 @@ function connectSocket(userId) {
         // 🔥 NEW MESSAGE
         // =========================
         if (data.type === "message") {
+            const incomingSenderId = String(data.sender_id ?? data.sender ?? "");
+            const messageDate = data.timestamp ? new Date(data.timestamp) : new Date();
 
             // 🔊 SOUND + NOTIFICATION (only if other user)
-            if (String(data.sender) !== String(currentUserId)) {
+            if (incomingSenderId !== String(currentUserId)) {
 
                 let sound = document.getElementById("msg-sound");
                 if (sound) sound.play();
@@ -414,19 +415,17 @@ function connectSocket(userId) {
             // =========================
             // 🔥 MESSAGE UI
             // =========================
-            const now = new Date();
-
-            if (String(data.sender) === String(currentUserId)) {
+            if (incomingSenderId === String(currentUserId)) {
                 appendMessageMarkup(chatBox, renderTextMessageCard({
                     messageId: data.msg_id,
                     messageText: data.message,
                     isOwn: true,
-                    timeText: formatMessageTime(now),
+                    timeText: formatMessageTime(messageDate),
                     labelText: "You",
                     showActions: true,
                     showTick: true,
                     isRead: false,
-                }), now);
+                }), messageDate);
 
                 if (data.local_only) {
                     showNotification("This message is visible only to you.");
@@ -437,11 +436,11 @@ function connectSocket(userId) {
                     messageId: data.msg_id,
                     messageText: data.message,
                     isOwn: false,
-                    timeText: formatMessageTime(now),
-                    labelText: getChatDisplayName(),
+                    timeText: formatMessageTime(messageDate),
+                    labelText: data.sender_name || getChatDisplayName(),
                     showActions: false,
                     showTick: false,
-                }), now);
+                }), messageDate);
             }
         }
     };
@@ -525,7 +524,7 @@ function sendMessage(e) {
 
 function appendFileMessage(data, isOwn) {
     let chatBox = document.getElementById("chat-box");
-    const now = new Date();
+    const messageDate = data.timestamp ? new Date(data.timestamp) : new Date();
     const canEditOrDelete = !!data.message_id;
     let fileHtml = "";
     if (data.file_url) {
@@ -549,12 +548,12 @@ function appendFileMessage(data, isOwn) {
                 ${data.message ? `<div class="message-content">${escapeHtml(data.message)}</div>` : ""}
                 ${isOwn && canEditOrDelete ? `<div class="message-actions"><button type="button" class="message-action-btn js-edit-message" data-message-id="${data.message_id}" data-message-text="${escapeHtml(data.message || '')}">Edit</button><button type="button" class="message-action-btn js-delete-message" data-message-id="${data.message_id}">Delete</button></div>` : ""}
                 ${isOwn
-                    ? `<div class="text-[11px] text-right mt-1 opacity-85 tick tick-thin"><span class="tick-mark">✓</span><span class="message-time">${formatMessageTime(now)}</span></div>`
-                    : `<div class="text-[11px] text-right mt-1 text-slate-500 message-time">${formatMessageTime(now)}</div>`}
+                    ? `<div class="text-[11px] text-right mt-1 opacity-85 tick tick-thin"><span class="tick-mark">✓</span><span class="message-time">${formatMessageTime(messageDate)}</span></div>`
+                    : `<div class="text-[11px] text-right mt-1 text-slate-500 message-time">${formatMessageTime(messageDate)}</div>`}
             </div>
         </div>
     `;
-    appendMessageMarkup(chatBox, markup, now);
+    appendMessageMarkup(chatBox, markup, messageDate);
 }
 
 function getCSRFToken() {
@@ -987,5 +986,218 @@ document.addEventListener("click", function(e) {
     if (isMenuAreaClick) return;
     if (menu) menu.classList.add("hidden");
     if (accountMenu) accountMenu.classList.add("hidden");
+});
+
+
+// =========================
+// AI CHAT SUMMARY
+// =========================
+document.addEventListener("DOMContentLoaded", function () {
+    const openBtn = document.getElementById("open-summary-modal");
+    const summaryModal = document.getElementById("summary-modal");
+    const closeSummaryModalBtn = document.getElementById("close-summary-modal");
+    const quickButtons = document.querySelectorAll(".summary-quick-btn");
+    const advancedToggle = document.getElementById("toggle-summary-advanced");
+    const advancedPanel = document.getElementById("summary-advanced-panel");
+    const startInput = document.getElementById("summary-start");
+    const endInput = document.getElementById("summary-end");
+    const languageInput = document.getElementById("summary-language");
+    const getSummaryBtn = document.getElementById("get-summary-btn");
+
+    const resultModal = document.getElementById("summary-result-modal");
+    const closeResultBtn = document.getElementById("close-summary-result");
+    const resultContent = document.getElementById("summary-result-content");
+    const chatUserId = document.getElementById("chat-user-id")?.value;
+
+    if (!openBtn || !summaryModal || !resultModal || !chatUserId) return;
+
+    let selectedRange = "last_1_hour";
+    let isAdvancedOpen = false;
+
+    function toLocalInputValue(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        const hours = String(date.getHours()).padStart(2, "0");
+        const minutes = String(date.getMinutes()).padStart(2, "0");
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function toISOFromLocalInput(localInputValue) {
+        if (!localInputValue) return "";
+        const parsed = new Date(localInputValue);
+        if (Number.isNaN(parsed.getTime())) return "";
+        return parsed.toISOString();
+    }
+
+    function getRangeFromPreset(preset) {
+        const now = new Date();
+        const end = new Date(now);
+        const start = new Date(now);
+
+        if (preset === "last_1_hour") {
+            start.setHours(start.getHours() - 1);
+        } else if (preset === "last_2_hour") {
+            start.setHours(start.getHours() - 2);
+        } else if (preset === "last_3_hour") {
+            start.setHours(start.getHours() - 3);
+        } else if (preset === "today") {
+            start.setHours(0, 0, 0, 0);
+        } else if (preset === "yesterday") {
+            const yStart = new Date(now);
+            yStart.setDate(now.getDate() - 1);
+            yStart.setHours(0, 0, 0, 0);
+
+            const yEnd = new Date(now);
+            yEnd.setDate(now.getDate() - 1);
+            yEnd.setHours(23, 59, 0, 0);
+
+            return { start: yStart, end: yEnd };
+        } else if (preset === "last_7_days") {
+            start.setDate(start.getDate() - 7);
+        }
+
+        return { start, end };
+    }
+
+    function highlightSelectedQuickButton() {
+        quickButtons.forEach((btn) => {
+            const active = btn.getAttribute("data-range") === selectedRange;
+            btn.classList.toggle("bg-cyan-50", active);
+            btn.classList.toggle("border-cyan-300", active);
+            btn.classList.toggle("text-cyan-900", active);
+        });
+    }
+
+    function setDefaultAdvancedValues() {
+        const range = getRangeFromPreset(selectedRange);
+        if (startInput) startInput.value = toLocalInputValue(range.start);
+        if (endInput) endInput.value = toLocalInputValue(range.end);
+    }
+
+    function openSummaryModal() {
+        summaryModal.classList.remove("hidden");
+        isAdvancedOpen = false;
+        if (advancedPanel) advancedPanel.classList.add("hidden");
+        if (advancedToggle) advancedToggle.textContent = "Advanced";
+        highlightSelectedQuickButton();
+        setDefaultAdvancedValues();
+    }
+
+    function closeSummaryModal() {
+        summaryModal.classList.add("hidden");
+    }
+
+    function openResultModal(content) {
+        if (resultContent) {
+            const safeText = String(content || "");
+            const lines = safeText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            const escapeHtml = (text) => String(text)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
+
+            const rendered = lines.map((line, index) => {
+                const isHeading = index === 0 || /^\*\*.*\*\*$/.test(line) || /^(summary|सारांश)/i.test(line) || /^(summary|सारांश)\s*[:：]/i.test(line);
+                const plainLine = line.replace(/^\*\*(.*)\*\*$/, "$1");
+                if (isHeading) {
+                    return `<div class="mb-3 text-base font-bold text-slate-900">${escapeHtml(plainLine.replace(/[:：]\s*$/, ""))}</div>`;
+                }
+
+                const bulletText = plainLine.replace(/^[-•]\s*/, "");
+                return `<div class="mb-2 leading-6 text-slate-700"><span class="font-semibold text-slate-900">•</span> ${escapeHtml(bulletText)}</div>`;
+            }).join("");
+
+            resultContent.innerHTML = rendered || `<div class="text-slate-700">${escapeHtml(safeText)}</div>`;
+        }
+        resultModal.classList.remove("hidden");
+    }
+
+    function closeResultModal() {
+        resultModal.classList.add("hidden");
+    }
+
+    openBtn.addEventListener("click", openSummaryModal);
+    closeSummaryModalBtn?.addEventListener("click", closeSummaryModal);
+    closeResultBtn?.addEventListener("click", closeResultModal);
+
+    summaryModal.addEventListener("click", function (e) {
+        if (e.target === summaryModal) closeSummaryModal();
+    });
+
+    resultModal.addEventListener("click", function (e) {
+        if (e.target === resultModal) closeResultModal();
+    });
+
+    quickButtons.forEach((btn) => {
+        btn.addEventListener("click", function () {
+            selectedRange = btn.getAttribute("data-range") || "last_1_hour";
+            highlightSelectedQuickButton();
+            setDefaultAdvancedValues();
+        });
+    });
+
+    advancedToggle?.addEventListener("click", function () {
+        isAdvancedOpen = !isAdvancedOpen;
+        if (advancedPanel) advancedPanel.classList.toggle("hidden", !isAdvancedOpen);
+        advancedToggle.textContent = isAdvancedOpen ? "Hide Advanced" : "Advanced";
+    });
+
+    getSummaryBtn?.addEventListener("click", function () {
+        const usingAdvanced = isAdvancedOpen;
+        let startValue = "";
+        let endValue = "";
+
+        if (usingAdvanced) {
+            startValue = toISOFromLocalInput(startInput?.value || "");
+            endValue = toISOFromLocalInput(endInput?.value || "");
+        } else {
+            const range = getRangeFromPreset(selectedRange);
+            startValue = range.start.toISOString();
+            endValue = range.end.toISOString();
+        }
+
+        if (!startValue || !endValue) {
+            showNotification("Please select valid date/time range");
+            return;
+        }
+
+        const body = new URLSearchParams();
+        body.append("user_id", chatUserId);
+        body.append("start_datetime", startValue);
+        body.append("end_datetime", endValue);
+        body.append("language", languageInput?.value || "English");
+
+        getSummaryBtn.disabled = true;
+        getSummaryBtn.textContent = "Generating...";
+
+        fetch("/summarize-chat/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-CSRFToken": getCSRFToken(),
+            },
+            body,
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                if (data.error) {
+                    showNotification(data.error);
+                    return;
+                }
+
+                closeSummaryModal();
+                openResultModal(data.summary || "No summary available.");
+            })
+            .catch(() => {
+                showNotification("Failed to summarize chat");
+            })
+            .finally(() => {
+                getSummaryBtn.disabled = false;
+                getSummaryBtn.textContent = "Get Summary";
+            });
+    });
 });
 

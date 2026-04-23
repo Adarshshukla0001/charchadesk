@@ -1,5 +1,5 @@
 # Standard imports for view helpers and profile parsing.
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
@@ -10,6 +10,8 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from .utils import build_chat_transcript, summarize_chat_with_gemini, to_aware_datetime
+
 
 from .models import User, Message, BlockedUser, ReportedUser
 
@@ -197,6 +199,36 @@ def dashboard(request):
 
     current_user = attach_profile_url(User.objects.get(id=request.session['user_id']))
 
+    # If a user is selected (?user=ID), load chat and mark their incoming messages as read.
+    other_user = None
+    messages = []
+    relation_state = {
+        'blocked_by_current': False,
+        'blocked_by_other': False,
+        'is_blocked_chat': False,
+        'reported_by_current': False,
+        'reported_by_other': False,
+    }
+    other_user_id = request.GET.get('user')
+    if other_user_id:
+        try:
+            other_user = attach_profile_url(User.objects.get(id=other_user_id))
+            relation_state = get_chat_relation_state(current_user, other_user)
+
+            Message.objects.filter(
+                sender=other_user,
+                receiver=current_user,
+                is_read=False
+            ).update(is_read=True)
+
+            messages = Message.objects.filter(
+                sender__in=[current_user, other_user],
+                receiver__in=[current_user, other_user]
+            ).order_by('timestamp')
+        except User.DoesNotExist:
+            other_user = None
+            messages = []
+
     # सिर्फ chat वाले users (sidebar में default)
     chat_users = User.objects.filter(
         Q(sent_messages__receiver=current_user) | 
@@ -215,35 +247,13 @@ def dashboard(request):
         ).order_by('-timestamp').first()
         unread = Message.objects.filter(
             sender=u,
-            receiver=current_user
+            receiver=current_user,
+            is_read=False
         ).count()
         u.last_message = last_msg.message if last_msg else ""
         u.unread_count = unread
         u.has_chat = u in chat_users
         user_list.append(u)
-
-    # If a user is selected (GET param ?user=ID), show messages
-    other_user = None
-    messages = []
-    relation_state = {
-        'blocked_by_current': False,
-        'blocked_by_other': False,
-        'is_blocked_chat': False,
-        'reported_by_current': False,
-        'reported_by_other': False,
-    }
-    other_user_id = request.GET.get('user')
-    if other_user_id:
-        try:
-            other_user = attach_profile_url(User.objects.get(id=other_user_id))
-            relation_state = get_chat_relation_state(current_user, other_user)
-            messages = Message.objects.filter(
-                sender__in=[current_user, other_user],
-                receiver__in=[current_user, other_user]
-            ).order_by('timestamp')
-        except User.DoesNotExist:
-            other_user = None
-            messages = []
 
     last_message = messages.last() if hasattr(messages, 'last') else None
     last_message_date = last_message.timestamp.strftime('%Y-%m-%d') if last_message else ''
@@ -369,6 +379,7 @@ def send_message(request):
             'sender': sender.name,
             'file_url': None,
             'file_name': None,
+            'timestamp': timezone.now().isoformat(),
             'local_only': True,
             'status': 'ok',
         })
@@ -389,6 +400,7 @@ def send_message(request):
         'sender': sender.name,
         'file_url': file_url,
         'file_name': file_name,
+        'timestamp': msg.timestamp.isoformat(),
         'local_only': False,
     })
 
@@ -533,3 +545,59 @@ def delete_message(request):
 
     message.delete()
     return JsonResponse({'status': 'ok', 'message_id': message_id})
+
+
+
+def summarize_chat(request):
+    if request.method != "POST":
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    if 'user_id' not in request.session:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    try:
+        current_user = User.objects.get(id=request.session['user_id'])
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+
+    other_user_id = request.POST.get('user_id')
+    start_raw = request.POST.get('start_datetime')
+    end_raw = request.POST.get('end_datetime')
+    language = (request.POST.get('language') or 'English').strip()
+
+    if not other_user_id:
+        return JsonResponse({'error': 'Chat user is required'}, status=400)
+
+    try:
+        other_user = User.objects.get(id=other_user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'Selected user not found'}, status=404)
+
+    start_dt = to_aware_datetime(start_raw)
+    end_dt = to_aware_datetime(end_raw)
+
+    if not start_dt or not end_dt:
+        return JsonResponse({'error': 'Please provide valid start and end datetime'}, status=400)
+
+    if start_dt >= end_dt:
+        return JsonResponse({'error': 'Start datetime must be before end datetime'}, status=400)
+
+    # datetime-local uses minute precision; include the complete selected end minute.
+    end_dt_exclusive = end_dt + timedelta(minutes=1)
+
+    # Query only selected window and cap records to reduce token usage.
+    chat_messages = Message.objects.filter(
+        sender__in=[current_user, other_user],
+        receiver__in=[current_user, other_user],
+        timestamp__gte=start_dt,
+        timestamp__lt=end_dt_exclusive,
+    ).select_related('sender').order_by('timestamp')[:80]
+
+    transcript = build_chat_transcript(chat_messages, max_messages=80, max_chars=9000)
+
+    if not transcript:
+        return JsonResponse({'summary': 'No messages found in this time range.'})
+
+    summary = summarize_chat_with_gemini(transcript, language=language)
+
+    return JsonResponse({'summary': summary})
