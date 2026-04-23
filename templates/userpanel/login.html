@@ -11,49 +11,36 @@
 <body class="auth-bg min-h-screen flex items-center justify-center px-4 py-10">
     <div class="auth-grid fixed inset-0 pointer-events-none"></div>
 
-    <div class="auth-shell relative">
-        <aside class="auth-side hidden md:block">
-            <p class="auth-side-kicker">Secure messaging</p>
-            <h2 class="auth-side-title">Login karke team conversations continue karo</h2>
-            <p class="auth-side-copy">Fast sign in, clean interface, aur real-time communication ek hi jagah.</p>
-            <div class="auth-chip-row">
-                <span class="auth-chip">Real-time Chat</span>
-                <span class="auth-chip">Profile Ready</span>
-                <span class="auth-chip">Simple & Secure</span>
-            </div>
-        </aside>
-
-        <div class="auth-card relative w-full p-7 md:p-9">
-            <div class="mb-6">
-                <p class="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-700">CharchaDesk</p>
-                <h1 class="mt-2 text-2xl font-extrabold text-slate-900">Welcome back</h1>
-                <p class="mt-1 text-sm text-slate-600">Apne account me login karke chats continue karein.</p>
-            </div>
-
-            {% if error %}
-            <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</div>
-            {% endif %}
-
-            <form method="post" class="space-y-4">
-                {% csrf_token %}
-                <div>
-                    <label for="email" class="mb-1 block text-sm font-semibold text-slate-700">Email</label>
-                    <input id="email" type="email" name="email" class="auth-input" placeholder="you@example.com" value="{{ request.POST.email|default:'' }}" required>
-                </div>
-
-                <div>
-                    <label for="password" class="mb-1 block text-sm font-semibold text-slate-700">Password</label>
-                    <input id="password" type="password" name="password" class="auth-input" placeholder="Enter password" required>
-                </div>
-
-                <button type="submit" class="auth-btn">Login</button>
-            </form>
-
-            <p class="mt-5 text-center text-sm text-slate-600">
-                New here?
-                <a href="{% url 'register' %}" class="auth-link">Create account</a>
-            </p>
+    <div class="auth-card relative w-full max-w-md rounded-[28px] p-7 md:p-9">
+        <div class="mb-6">
+            <p class="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-700">CharchaDesk</p>
+            <h1 class="mt-2 text-2xl font-extrabold text-slate-900">Welcome back</h1>
+            <p class="mt-1 text-sm text-slate-600">Sign in to continue your conversations and manage your profile.</p>
         </div>
+
+        {% if error %}
+        <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="email" class="mb-1 block text-sm font-semibold text-slate-700">Email</label>
+                <input id="email" type="email" name="email" class="auth-input" placeholder="you@example.com" value="{{ request.POST.email|default:'' }}" required>
+            </div>
+
+            <div>
+                <label for="password" class="mb-1 block text-sm font-semibold text-slate-700">Password</label>
+                <input id="password" type="password" name="password" class="auth-input" placeholder="Enter password" required>
+            </div>
+
+            <button type="submit" class="auth-btn">Login</button>
+        </form>
+
+        <p class="mt-5 text-center text-sm text-slate-600">
+            New here?
+            <a href="{% url 'register' %}" class="auth-link">Create account</a>
+        </p>
     </div>
 </body>
 </html>

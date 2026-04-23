@@ -11,55 +11,42 @@
 <body class="auth-bg min-h-screen flex items-center justify-center px-4 py-10">
     <div class="auth-grid fixed inset-0 pointer-events-none"></div>
 
-    <div class="auth-shell relative">
-        <aside class="auth-side hidden md:block">
-            <p class="auth-side-kicker">Get started</p>
-            <h2 class="auth-side-title">Naya account banao aur instantly connect karo</h2>
-            <p class="auth-side-copy">Professional profile, smooth onboarding, aur ready-to-chat dashboard with modern flow.</p>
-            <div class="auth-chip-row">
-                <span class="auth-chip">Quick Signup</span>
-                <span class="auth-chip">Profile Personalization</span>
-                <span class="auth-chip">Team Ready</span>
-            </div>
-        </aside>
-
-        <div class="auth-card relative w-full p-7 md:p-9">
-            <div class="mb-6">
-                <p class="text-xs font-semibold uppercase tracking-[0.22em] text-orange-700">CharchaDesk</p>
-                <h1 class="mt-2 text-2xl font-extrabold text-slate-900">Create your account</h1>
-                <p class="mt-1 text-sm text-slate-600">2 minute setup, phir seedha chat dashboard.</p>
-            </div>
-
-            {% if error %}
-            <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</div>
-            {% endif %}
-
-            <form method="post" class="space-y-4">
-                {% csrf_token %}
-
-                <div>
-                    <label for="name" class="mb-1 block text-sm font-semibold text-slate-700">Full Name</label>
-                    <input id="name" type="text" name="name" class="auth-input" placeholder="Your name" value="{{ request.POST.name|default:'' }}" required>
-                </div>
-
-                <div>
-                    <label for="email" class="mb-1 block text-sm font-semibold text-slate-700">Email</label>
-                    <input id="email" type="email" name="email" class="auth-input" placeholder="you@example.com" value="{{ request.POST.email|default:'' }}" required>
-                </div>
-
-                <div>
-                    <label for="password" class="mb-1 block text-sm font-semibold text-slate-700">Password</label>
-                    <input id="password" type="password" name="password" class="auth-input" placeholder="Create a strong password" required>
-                </div>
-
-                <button type="submit" class="auth-btn">Create Account</button>
-            </form>
-
-            <p class="mt-5 text-center text-sm text-slate-600">
-                Already registered?
-                <a href="{% url 'login' %}" class="auth-link">Login now</a>
-            </p>
+    <div class="auth-card relative w-full max-w-md rounded-[26px] p-7 md:p-9">
+        <div class="mb-6">
+            <p class="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-700">CharchaDesk</p>
+            <h1 class="mt-2 text-2xl font-extrabold text-slate-900">Create your account</h1>
+            <p class="mt-1 text-sm text-slate-600">Join the workspace in a few seconds.</p>
         </div>
+
+        {% if error %}
+        <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+
+            <div>
+                <label for="name" class="mb-1 block text-sm font-semibold text-slate-700">Full Name</label>
+                <input id="name" type="text" name="name" class="auth-input" placeholder="Your name" value="{{ request.POST.name|default:'' }}" required>
+            </div>
+
+            <div>
+                <label for="email" class="mb-1 block text-sm font-semibold text-slate-700">Email</label>
+                <input id="email" type="email" name="email" class="auth-input" placeholder="you@example.com" value="{{ request.POST.email|default:'' }}" required>
+            </div>
+
+            <div>
+                <label for="password" class="mb-1 block text-sm font-semibold text-slate-700">Password</label>
+                <input id="password" type="password" name="password" class="auth-input" placeholder="Create a strong password" required>
+            </div>
+
+            <button type="submit" class="auth-btn">Create Account</button>
+        </form>
+
+        <p class="mt-5 text-center text-sm text-slate-600">
+            Already registered?
+            <a href="{% url 'login' %}" class="auth-link">Login now</a>
+        </p>
     </div>
 </body>
 </html>
