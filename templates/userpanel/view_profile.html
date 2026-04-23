@@ -4,50 +4,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Profile</title>
+    <title>View Profile | CharchaDesk</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeSlide {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .profile-card {
+            animation: fadeSlide 0.55s ease;
+        }
+
+        .profile-chip {
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(248, 250, 252, 0.9);
+            border-radius: 12px;
+            padding: 0.85rem;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div class="max-w-3xl mx-auto p-6">
-        <div class="bg-white shadow rounded-xl p-6">
-            <div class="flex items-center gap-4">
+<body class="min-h-screen bg-gradient-to-br from-slate-100 via-cyan-50 to-orange-50">
+    <div class="max-w-4xl mx-auto px-4 py-8 md:py-12">
+        <div class="profile-card bg-white/85 border border-slate-200 shadow-2xl shadow-slate-200/60 rounded-3xl p-6 md:p-8 backdrop-blur-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
+                <div class="flex items-center gap-4">
                 {% if profile_user.profile_picture %}
-                    <img src="{{ profile_user.profile_picture.url }}" alt="Profile" class="h-20 w-20 rounded-full object-cover border">
+                    <img src="{{ profile_user.profile_picture.url }}" alt="Profile" class="h-24 w-24 rounded-2xl object-cover border-2 border-cyan-200 shadow-lg">
                 {% else %}
-                    <img src="https://i.pravatar.cc/96?u={{ profile_user.email }}" alt="Profile" class="h-20 w-20 rounded-full object-cover border">
+                    <img src="https://i.pravatar.cc/96?u={{ profile_user.email }}" alt="Profile" class="h-24 w-24 rounded-2xl object-cover border-2 border-cyan-200 shadow-lg">
                 {% endif %}
-                <div>
-                    <h1 class="text-2xl font-semibold text-gray-900">{{ profile_user.name }}</h1>
-                    <p class="text-gray-600">{{ profile_user.email }}</p>
+                    <div>
+                        <p class="text-xs uppercase tracking-[0.2em] font-bold text-cyan-700">User profile</p>
+                        <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 mt-1">{{ profile_user.name }}</h1>
+                        <p class="text-slate-600">{{ profile_user.email }}</p>
+                    </div>
+                </div>
+                <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    Profile Active
                 </div>
             </div>
 
-            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                    <p class="text-gray-500">Gender</p>
-                    <p class="text-gray-900">{{ profile_user.gender|default:"Not set" }}</p>
+            <div class="mt-7 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="profile-chip">
+                    <p class="text-slate-500">Gender</p>
+                    <p class="text-slate-900 font-semibold mt-1">{{ profile_user.gender|default:"Not set" }}</p>
                 </div>
-                <div>
-                    <p class="text-gray-500">Phone</p>
-                    <p class="text-gray-900">{{ profile_user.phone_number|default:"Not set" }}</p>
+                <div class="profile-chip">
+                    <p class="text-slate-500">Phone</p>
+                    <p class="text-slate-900 font-semibold mt-1">{{ profile_user.phone_number|default:"Not set" }}</p>
                 </div>
-                <div>
-                    <p class="text-gray-500">Location</p>
-                    <p class="text-gray-900">{{ profile_user.location|default:"Not set" }}</p>
+                <div class="profile-chip">
+                    <p class="text-slate-500">Location</p>
+                    <p class="text-slate-900 font-semibold mt-1">{{ profile_user.location|default:"Not set" }}</p>
                 </div>
-                <div>
-                    <p class="text-gray-500">Date of Birth</p>
-                    <p class="text-gray-900">{{ profile_user.date_of_birth|default:"Not set" }}</p>
+                <div class="profile-chip">
+                    <p class="text-slate-500">Date of Birth</p>
+                    <p class="text-slate-900 font-semibold mt-1">{{ profile_user.date_of_birth|default:"Not set" }}</p>
                 </div>
             </div>
 
-            <div class="mt-6">
-                <p class="text-gray-500 text-sm">Bio</p>
-                <p class="text-gray-900">{{ profile_user.bio|default:"No bio available." }}</p>
+            <div class="mt-6 profile-chip">
+                <p class="text-slate-500 text-sm">Bio</p>
+                <p class="text-slate-900 mt-1 leading-relaxed">{{ profile_user.bio|default:"No bio available." }}</p>
             </div>
 
-            <div class="mt-8">
-                <a href="{% url 'dashboard' %}?user={{ profile_user.id }}" class="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Back to Chat</a>
+            <div class="mt-8 flex flex-wrap gap-3">
+                <a href="{% url 'dashboard' %}?user={{ profile_user.id }}" class="inline-flex items-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition">Back to Chat</a>
+                <a href="{% url 'profile' %}" class="inline-flex items-center rounded-xl border border-cyan-300 bg-cyan-50 px-5 py-2.5 text-sm font-semibold text-cyan-800 hover:bg-cyan-100 transition">Edit Profile</a>
             </div>
         </div>
     </div>

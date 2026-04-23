@@ -2,6 +2,7 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from urllib.parse import parse_qs
 from asgiref.sync import sync_to_async
+from django.utils import timezone
 from .models import Message, User, BlockedUser, ReportedUser
 
 
@@ -116,10 +117,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         if await self.is_receiver_blocking_sender():
+            sender = await self.get_current_user()
             await self.send(text_data=json.dumps({
                 'type': 'message',
                 'message': message,
-                'sender': self.current_user_id,
+                'sender_id': self.current_user_id,
+                'sender_name': sender.name,
+                'timestamp': timezone.now().isoformat(),
                 'msg_id': None,
                 'local_only': True,
             }))
@@ -132,7 +136,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             {
                 'type': 'chat_message',
                 'message': msg.message,
-                'sender': self.current_user_id,
+                'sender_id': msg.sender_id,
+                'sender_name': msg.sender.name,
+                'timestamp': msg.timestamp.isoformat(),
                 'msg_id': msg.id
             }
         )
@@ -144,7 +150,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'message',
             'message': event['message'],
-            'sender': event['sender'],
+            'sender_id': event['sender_id'],
+            'sender_name': event.get('sender_name', ''),
+            'timestamp': event.get('timestamp'),
             'msg_id': event['msg_id']
         }))
 
@@ -228,6 +236,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             message=message,
             is_read=False
         )
+
+    @sync_to_async
+    def get_current_user(self):
+        return User.objects.get(id=self.current_user_id)
 
     @sync_to_async
     def mark_messages_read(self):

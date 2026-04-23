@@ -7,41 +7,96 @@
     <title>Welcome to CharchaDesk</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
         .typing {
-            border-right: .15em solid #6366f1;
+            border-right: .14em solid #0284c7;
             white-space: nowrap;
             overflow: hidden;
-            animation: typing 3s steps(30, end), blink-caret .75s step-end infinite;
+            animation: blink-caret .75s step-end infinite;
         }
+
+        .bg-orb {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(2px);
+            animation: float-orb 6s ease-in-out infinite;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 28px 60px rgba(15, 23, 42, 0.14);
+            animation: rise 0.7s ease;
+        }
+
+        .pulse-ring {
+            animation: ring 1.6s ease-in-out infinite;
+        }
+
         @keyframes typing {
             from { width: 0 }
             to { width: 100% }
         }
         @keyframes blink-caret {
             from, to { border-color: transparent }
-            50% { border-color: #6366f1; }
+            50% { border-color: #0284c7; }
+        }
+        @keyframes float-orb {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-14px); }
+        }
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes ring {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.22); }
+            50% { box-shadow: 0 0 0 13px rgba(2, 132, 199, 0); }
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-blue-100 to-purple-200 min-h-screen flex flex-col items-center justify-center">
-    <div class="flex flex-col items-center justify-center h-screen w-full">
-        <div class="mb-8 animate-spin-slow">
-            <svg class="w-20 h-20 text-indigo-500 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-            </svg>
+<body class="min-h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-orange-50 to-cyan-50 flex items-center justify-center px-4 py-8">
+    <span class="bg-orb h-56 w-56 bg-cyan-300 opacity-35 top-8 left-2"></span>
+    <span class="bg-orb h-64 w-64 bg-orange-300 opacity-30 bottom-6 right-2" style="animation-delay: 1s;"></span>
+
+    <div class="glass-panel relative z-10 w-full max-w-3xl rounded-3xl p-6 md:p-10">
+        <div class="flex items-center justify-between gap-4 mb-8">
+            <div>
+                <p class="text-xs uppercase tracking-[0.22em] font-bold text-cyan-800">CharchaDesk</p>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 mt-2">Launching your workspace</h1>
+            </div>
+            <div class="pulse-ring rounded-full bg-cyan-600 p-3">
+                <svg class="h-7 w-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+            </div>
         </div>
-        <div class="text-3xl md:text-4xl font-bold text-indigo-700 mb-4">
-            <span id="typing-text" class="typing"></span>
+
+        <div class="rounded-2xl bg-white/80 border border-slate-200 p-5 md:p-6">
+            <p class="text-sm font-semibold text-slate-600">Personal greeting</p>
+            <p class="text-2xl md:text-3xl font-bold text-slate-900 mt-2 min-h-[48px]">
+                <span id="typing-text" class="typing"></span>
+            </p>
+            <p class="mt-4 text-base text-slate-600">Aapko dashboard pe le jaa rahe hain. Bas kuch seconds...</p>
         </div>
-        <div class="mt-4 text-lg text-gray-600 animate-pulse">Loading your dashboard...</div>
+
+        <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div class="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 font-semibold text-cyan-800">Fast login flow</div>
+            <div class="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 font-semibold text-orange-800">Clean UI experience</div>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-700">Realtime chat ready</div>
+        </div>
+
         <audio id="welcome-audio" src="{% static 'userpanel/welcome_voice.mp3' %}" preload="auto"></audio>
     </div>
     <script>
-        // Typing animation
-        const text = 'charchadesk me apka swagat hai';
+        const text = 'CharchaDesk me aapka swagat hai';
         let i = 0;
         const typingText = document.getElementById('typing-text');
+
         function typeWriter() {
             if (i < text.length) {
                 typingText.innerHTML += text.charAt(i);
@@ -49,13 +104,16 @@
                 setTimeout(typeWriter, 70);
             }
         }
+
         typeWriter();
-        // Play welcome audio
+
         window.onload = function() {
             const audio = document.getElementById('welcome-audio');
-            audio.play();
+            audio.play().catch(function() {
+                // Browser autoplay may block audio without user gesture.
+            });
         };
-        // Redirect after 12 seconds
+
         setTimeout(function() {
             window.location.href = "/dashboard/";
         }, 12000);
