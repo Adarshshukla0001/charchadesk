@@ -5,7 +5,7 @@
     <title>CharchaDesk</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="{% static 'userpanel/dashboard.css' %}?v=20260423c">
+    <link rel="stylesheet" href="{% static 'userpanel/dashboard.css' %}?v=20260423d">
 </head>
 
 <body class="bg-slate-950 text-slate-900">
@@ -72,7 +72,7 @@
                 <span class="bg-green-500 text-xs px-2 py-0.5 rounded-full">{{ u.unread_count }}</span>
                 {% endif %}
                 <!-- ✅ REALTIME STATUS -->
-                <span class="user-status text-xs text-green-400">{% if u.is_online %}● online{% endif %}</span>
+                <span class="user-status text-xs {% if u.is_online %}text-green-400{% else %}text-slate-400{% endif %}">{% if u.is_online %}● online{% else %}● offline{% endif %}</span>
             </div>
         </div>
     </a>
@@ -80,8 +80,9 @@
 
 </div>
         <div class="p-4 border-t border-white/10 bg-slate-950/70">
-            <div class="flex min-h-16 items-center justify-center">
-                <p class="text-center brand-signature">CharchaDesk</p>
+            <div class="flex min-h-16 items-center justify-center gap-3">
+                <img src="/static/logo.png" alt="CharchaDesk" class="h-14 w-14 object-contain brand-logo-spin" />
+                <p id="brand-typing" class="text-center brand-signature brand-typing" data-brand-text="CharchaDesk">CharchaDesk</p>
             </div>
         </div>
 
@@ -127,10 +128,11 @@
                     <a href="{% url 'view_profile' other_user.id %}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">
                         👤 View Profile
                     </a>
-                    <button id="chat-emotion-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">🧠 Emotion Detection: Off</button>
-                    <button id="chat-block-btn" type="button" data-user-id="{{ other_user.id }}" data-is-blocked="{% if blocked_by_current %}true{% else %}false{% endif %}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">{% if blocked_by_current %}✅ Unblock{% else %}🚫 Block{% endif %}</button>
-                    <button id="chat-report-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">⚠️ Report</button>
-                    <button id="chat-delete-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left text-red-500">🗑 Delete Chat</button>
+                    <button id="chat-emotion-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">Emotion Detection: Off</button>
+                    <button id="chat-block-btn" type="button" data-user-id="{{ other_user.id }}" data-is-blocked="{% if blocked_by_current %}true{% else %}false{% endif %}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">{% if blocked_by_current %}Unblock{% else %} Block{% endif %}</button>
+                    <button id="chat-report-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">Report</button>
+                    <hr>
+                    <button id="chat-delete-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left text-red-500">Delete Chat</button>
                     {% else %}
                     <span class="block w-full px-4 py-2 text-left text-gray-400">Select a user first</span>
                     {% endif %}
@@ -251,7 +253,7 @@
                 {% endfor %}
             {% else %}
                 <div class="flex justify-center items-center h-full text-gray-400">
-                    Start conversation 🚀
+                    Start conversation 
                 </div>
             {% endif %}
 

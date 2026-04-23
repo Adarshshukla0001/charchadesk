@@ -177,6 +177,7 @@ def login_view(request):
                     user.save(update_fields=['password'])
 
                 request.session['user_id'] = user.id
+                request.session.set_expiry(60 * 60)
                 return redirect('welcome')
             else:
                 return render(request, 'userpanel/login.html', {

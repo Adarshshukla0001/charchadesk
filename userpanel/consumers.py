@@ -3,6 +3,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from urllib.parse import parse_qs
 from asgiref.sync import sync_to_async
 from django.utils import timezone
+from .services.ai_service import detect_emotion
 from .models import Message, User, BlockedUser, ReportedUser
 
 
@@ -103,6 +104,30 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
+        if data.get('type') == 'detect_emotion':
+            message_text = (data.get('message') or '').strip()
+            message_id = data.get('message_id')
+
+            if not message_text:
+                await self.send(text_data=json.dumps({
+                    'type': 'emotion_result',
+                    'message_id': message_id,
+                    'emotion': 'neutral',
+                    'emoji': '😐',
+                    'source': 'empty',
+                }))
+                return
+
+            emotion_label, emotion_emoji, source = await sync_to_async(detect_emotion)(message_text)
+            await self.send(text_data=json.dumps({
+                'type': 'emotion_result',
+                'message_id': message_id,
+                'emotion': emotion_label,
+                'emoji': emotion_emoji,
+                'source': source,
+            }))
+            return
+
         # 🔥 NORMAL MESSAGE
         message = data.get('message')
 
@@ -133,6 +158,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }))
             return
 
+        emotion_label, emotion_emoji, emotion_source = await sync_to_async(detect_emotion)(message)
+
         msg = await self.save_message(message)
         msg_local = timezone.localtime(msg.timestamp)
 
@@ -147,7 +174,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'time_label': msg_local.strftime('%I:%M %p').lstrip('0'),
                 'date_key': msg_local.strftime('%Y-%m-%d'),
                 'date_label': msg_local.strftime('%a, %d %b %Y'),
-                'msg_id': msg.id
+                'msg_id': msg.id,
+                'emotion': emotion_label,
+                'emoji': emotion_emoji,
+                'emotion_source': emotion_source,
             }
         )
 
@@ -164,7 +194,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'time_label': event.get('time_label', ''),
             'date_key': event.get('date_key', ''),
             'date_label': event.get('date_label', ''),
-            'msg_id': event['msg_id']
+            'msg_id': event['msg_id'],
+            'emotion': event.get('emotion', ''),
+            'emoji': event.get('emoji', ''),
+            'emotion_source': event.get('emotion_source', ''),
         }))
 
     # =========================

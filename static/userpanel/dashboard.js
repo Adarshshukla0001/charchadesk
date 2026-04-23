@@ -10,13 +10,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Build user list from DOM (for initial render)
     allUsers = Array.from(userListContainer.querySelectorAll(".user-item")).map(item => {
+        const statusText = (item.querySelector(".user-status")?.innerText || "").toLowerCase();
         return {
             id: item.getAttribute("data-user-id"),
             name: item.querySelector(".font-medium")?.innerText || "",
             nameLower: (item.querySelector(".font-medium")?.innerText || "").toLowerCase(),
             last_message: item.querySelector(".text-xs.text-gray-400")?.innerText || "",
             unread_count: item.querySelector(".bg-green-500")?.innerText || 0,
-            is_online: item.querySelector(".user-status")?.classList.contains("text-green-400"),
+            is_online: statusText.includes("online"),
             has_chat: item.getAttribute("data-has-chat") === "true",
             avatar_url: item.getAttribute("data-avatar-url") || ""
         };
@@ -46,7 +47,9 @@ document.addEventListener("DOMContentLoaded", function () {
     function userHtml(u) {
         const activeUserId = new URLSearchParams(window.location.search).get('user');
         const avatarUrl = u.avatar_url || DEFAULT_AVATAR;
-        const statusMarkup = u.is_online ? `<span class="user-status text-xs text-green-400">● online</span>` : `<span class="user-status text-xs text-green-400"></span>`;
+        const statusMarkup = u.is_online
+            ? `<span class="user-status text-xs text-green-400">● online</span>`
+            : `<span class="user-status text-xs text-slate-400">● offline</span>`;
         return `<a href="/dashboard/?user=${u.id}">
             <div class="user-item flex justify-between items-center px-4 py-3 hover:bg-gray-800 cursor-pointer transition${(String(activeUserId) === String(u.id)) ? ' bg-gray-800' : ''}" data-name="${u.nameLower}" data-user-id="${u.id}" data-has-chat="${u.has_chat}" data-avatar-url="${u.avatar_url || ''}">
                 <div class="flex items-center gap-3">
@@ -71,6 +74,33 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Initial render: only chat users
     renderUserList("");
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    const currentUserField = document.getElementById("current-user-id");
+    if (!currentUserField?.value) return;
+
+    const AUTO_LOGOUT_MS = 60 * 60 * 1000;
+    const loginKey = `charchadesk_login_at_${currentUserField.value}`;
+    const now = Date.now();
+    const storedLoginAt = Number(localStorage.getItem(loginKey) || 0);
+    const loginAt = storedLoginAt > 0 ? storedLoginAt : now;
+
+    if (!storedLoginAt) {
+        localStorage.setItem(loginKey, String(loginAt));
+    }
+
+    const elapsed = now - loginAt;
+    const remaining = AUTO_LOGOUT_MS - elapsed;
+
+    if (remaining <= 0) {
+        window.location.href = "/logout/?reason=timeout";
+        return;
+    }
+
+    setTimeout(() => {
+        window.location.href = "/logout/?reason=timeout";
+    }, remaining);
 });
 // =========================
 // 🔥 FILE PREVIEW (overlay above input, with X button)
@@ -119,7 +149,7 @@ let allUsers = [];
 let renderUserList = function () {};
 let isBlockedByCurrentUser = false;
 let isReportedByChatUser = false;
-let emotionDetectionEnabled = false;
+let emotionDetectionEnabled = true;
 let emotionServiceWarningShown = false;
 
 const EMOTION_STORAGE_PREFIX = "charchadesk_emotion_detection_";
@@ -169,7 +199,7 @@ function syncBlockButtonUI() {
     const blockBtn = document.getElementById("chat-block-btn");
     if (!blockBtn) return;
     blockBtn.setAttribute("data-is-blocked", isBlockedByCurrentUser ? "true" : "false");
-    blockBtn.textContent = isBlockedByCurrentUser ? "✅ Unblock" : "🚫 Block";
+    blockBtn.textContent = isBlockedByCurrentUser ? "Unblock" : "Block";
 }
 
 function applyModerationEvent(data) {
@@ -280,8 +310,8 @@ function setEmotionButtonUI() {
     const btn = document.getElementById("chat-emotion-btn");
     if (!btn) return;
     btn.textContent = emotionDetectionEnabled
-        ? "🧠 Emotion Detection: On"
-        : "🧠 Emotion Detection: Off";
+        ? "Emotion Detection: On"
+        : "Emotion Detection: Off";
 }
 
 function renderEmotionBadge(emotion, emoji) {
@@ -355,46 +385,14 @@ function attachEmotionBadge(rowNode, emotion, emoji) {
 function detectEmotionForMessage(messageText, rowNode) {
     if (!emotionDetectionEnabled) return;
     if (!messageText || !messageText.trim()) return;
-    const receiverId = document.getElementById("chat-user-id")?.value;
-    if (!receiverId || !rowNode) return;
+    const messageId = rowNode?.getAttribute("data-message-id");
+    if (!socket || socket.readyState !== WebSocket.OPEN || !messageId) return;
 
-    const body = new URLSearchParams();
-    body.append("user_id", receiverId);
-    body.append("message", messageText);
-
-    fetch("/detect-emotion/", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "X-CSRFToken": getCSRFToken()
-        },
-        body
-    })
-        .then(async (response) => {
-            let data = {};
-            try {
-                data = await response.json();
-            } catch (_) {
-                data = {};
-            }
-
-            if (!response.ok || data.error) {
-                return;
-            }
-
-            if (data.source && data.source !== "ai" && data.source !== "empty") {
-                if (!emotionServiceWarningShown) {
-                    emotionServiceWarningShown = true;
-                    showNotification("Emotion AI unavailable. Configure Gemini API to use AI understanding.");
-                }
-                return;
-            }
-
-            attachEmotionBadge(rowNode, data.emotion, data.emoji);
-        })
-        .catch(() => {
-            // Keep chat responsive even if emotion service fails.
-        });
+    socket.send(JSON.stringify({
+        type: "detect_emotion",
+        message_id: messageId,
+        message: messageText,
+    }));
 }
 
 function detectEmotionForExistingMessages() {
@@ -403,6 +401,12 @@ function detectEmotionForExistingMessages() {
         const messageText = rowNode.querySelector(".message-content")?.textContent || "";
         if (!messageText.trim()) return;
         detectEmotionForMessage(messageText, rowNode);
+    });
+}
+
+function clearEmotionBadges() {
+    document.querySelectorAll(".message-row-other .message-emotion").forEach((badge) => {
+        badge.remove();
     });
 }
 
@@ -420,6 +424,15 @@ function updateMessageCard(messageId, newText) {
     });
 }
 
+function applyEmotionResult(messageId, emotion, emoji) {
+    if (!emotionDetectionEnabled) return;
+    if (!messageId) return;
+    const rowNode = document.querySelector(`.message-row[data-message-id="${messageId}"]`);
+    if (rowNode) {
+        attachEmotionBadge(rowNode, emotion, emoji);
+    }
+}
+
 function removeMessageCard(messageId) {
     document.querySelectorAll(`.message-row[data-message-id="${messageId}"]`).forEach(node => node.remove());
 }
@@ -433,7 +446,7 @@ function connectSocket(userId) {
     let currentUserField = document.getElementById("current-user-id");
 
     if (!currentUserField) {
-        console.error("❌ current-user-id not found");
+        console.error(" current-user-id not found");
         return;
     }
 
@@ -488,19 +501,14 @@ function connectSocket(userId) {
         // 🔥 ONLINE / OFFLINE ALL USERS
         // =========================
         if (data.type === "status" && Array.isArray(data.online_users)) {
-            let users = document.querySelectorAll(".user-item");
-            users.forEach(u => {
-                let uid = u.getAttribute("data-user-id");
-                let statusEl = u.querySelector(".user-status");
-                if (!statusEl) return;
-                if (data.online_users.map(String).includes(String(uid))) {
-                    statusEl.textContent = "● online";
-                    statusEl.className = "user-status text-green-400 text-xs";
-                } else {
-                    statusEl.textContent = "";
-                    statusEl.className = "user-status text-green-400 text-xs";
-                }
-            });
+            const onlineSet = new Set(data.online_users.map(String));
+            allUsers = allUsers.map((u) => ({
+                ...u,
+                is_online: onlineSet.has(String(u.id)),
+            }));
+
+            const activeFilter = document.getElementById("search-input")?.value.toLowerCase().trim() || "";
+            renderUserList(activeFilter);
             return;
         }
 
@@ -550,7 +558,7 @@ function connectSocket(userId) {
                 let sound = document.getElementById("msg-sound");
                 if (sound) sound.play();
 
-                showNotification("💬 " + data.message);
+                showNotification(data.message);
 
                 // 🔥 MARK READ (IMPORTANT FIX)
                 socket.send(JSON.stringify({
@@ -586,22 +594,31 @@ function connectSocket(userId) {
                     labelText: data.sender_name || getChatDisplayName(),
                     showActions: false,
                     showTick: false,
+                    emotion: emotionDetectionEnabled ? (data.emotion || "") : "",
+                    emotionEmoji: emotionDetectionEnabled ? (data.emoji || "") : "",
                 }), messageDate, dateMeta);
-                detectEmotionForMessage(data.message, rowNode);
+                if (!data.emotion && emotionDetectionEnabled) {
+                    detectEmotionForMessage(data.message, rowNode);
+                }
             }
+        }
+
+        if (data.type === "emotion_result") {
+            applyEmotionResult(data.message_id, data.emotion, data.emoji);
+            return;
         }
     };
 
     socket.onopen = function() {
-        console.log("✅ WebSocket connected");
+        console.log(" WebSocket connected");
     };
 
     socket.onclose = function() {
-        console.log("❌ WebSocket disconnected");
+        console.log("WebSocket disconnected");
     };
 
     socket.onerror = function(e) {
-        console.error("❌ Socket error", e);
+        console.error(" Socket error", e);
     };
 }
 
@@ -658,7 +675,7 @@ function sendMessage(e) {
 
     // If only text, use WebSocket
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-        console.log("❌ Socket not ready");
+        console.log("Socket not ready");
         return;
     }
 
@@ -1042,7 +1059,11 @@ document.addEventListener("DOMContentLoaded", function () {
     syncBlockButtonUI();
     loadEmotionDetectionPreference();
     setEmotionButtonUI();
-    detectEmotionForExistingMessages();
+    if (emotionDetectionEnabled) {
+        detectEmotionForExistingMessages();
+    } else {
+        clearEmotionBadges();
+    }
 
     if (accountMenu) {
         accountMenu.addEventListener("click", function (e) {
@@ -1159,6 +1180,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 detectEmotionForExistingMessages();
                 showNotification("Emotion detection enabled");
             } else {
+                clearEmotionBadges();
                 showNotification("Emotion detection disabled");
             }
         });

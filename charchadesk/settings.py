@@ -174,3 +174,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL = '/chat_uploads/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'chat_uploads')
+
+# Keep user session valid for 1 hour.
+SESSION_COOKIE_AGE = 60 * 60

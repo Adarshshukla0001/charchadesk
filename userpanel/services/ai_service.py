@@ -1,21 +1,59 @@
 from django.conf import settings
 import json
+import logging
 from urllib import request as urllib_request
 from urllib.error import URLError, HTTPError
 
+logger = logging.getLogger(__name__)
+
 try:
     import google.generativeai as genai
-except Exception:
+except Exception as e:
+    logger.warning(f"Google generativeai library not available: {e}")
     genai = None
 
 GEMINI_API_KEY = (getattr(settings, "GEMINI_API_KEY", "") or "").strip()
 model = None
-if genai is not None and GEMINI_API_KEY:
+
+def _initialize_model():
+    """Try to initialize Gemini model."""
+    global model
+    if model is not None:
+        return model
+    
+    if genai is None:
+        logger.warning("Google generativeai library not imported")
+        return None
+    
+    if not GEMINI_API_KEY:
+        logger.warning("GEMINI_API_KEY not configured")
+        return None
+    
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-    except Exception:
+        # Try models that actually exist
+        model_names = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name)
+                logger.info(f"Gemini model {model_name} initialized successfully")
+                return model
+            except Exception as e:
+                logger.debug(f"Model {model_name} not available: {e}")
+                continue
+        logger.debug("SDK models not available - will use REST API")
         model = None
+        return None
+    except Exception as e:
+        logger.debug(f"Gemini SDK initialization: {e}")
+        return None
+
+# Try initial initialization
+try:
+    if genai is not None and GEMINI_API_KEY:
+        _initialize_model()
+except Exception as e:
+    logger.error(f"Error during model initialization: {e}")
 
 
 EMOTION_EMOJI_MAP = {
@@ -86,63 +124,87 @@ def _extract_emotion_from_raw(raw_text, fallback_label):
 
 
 def _detect_with_gemini_sdk(prompt):
+    """Detect emotion using Gemini SDK. Returns (emotion_text, success_flag)"""
+    global model
+    
+    # Try to initialize if not already done
     if model is None:
-        return None
+        model = _initialize_model()
+    
+    if model is None:
+        return None, False
 
-    response = model.generate_content(prompt)
-    return getattr(response, "text", "") or ""
+    try:
+        response = model.generate_content(prompt)
+        text = getattr(response, "text", "") or ""
+        return text, True
+    except Exception as e:
+        logger.debug(f"SDK emotion detection failed: {e}")
+        return None, False
 
 
 def _detect_with_gemini_rest(prompt):
+    """Detect emotion using Gemini REST API. Returns (emotion_text, success_flag)"""
     if not GEMINI_API_KEY:
-        return None
+        logger.warning("GEMINI_API_KEY not available")
+        return None, False
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-    )
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": prompt,
-                    }
-                ]
+    # Try models that actually work with this API
+    models = [
+        "gemini-2.0-flash-latest",
+        "gemini-1.5-flash-latest", 
+        "gemini-1.5-pro-latest",
+    ]
+    
+    for model_name in models:
+        try:
+            # Use v1 endpoint for latest models instead of v1beta
+            url = (
+                "https://generativelanguage.googleapis.com/v1/models/"
+                f"{model_name}:generateContent?key={GEMINI_API_KEY}"
+            )
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0, "maxOutputTokens": 8},
             }
-        ],
-        "generationConfig": {
-            "temperature": 0,
-            "maxOutputTokens": 8,
-        },
-    }
 
-    req = urllib_request.Request(
-        url=url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+            req = urllib_request.Request(
+                url=url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
 
-    try:
-        with urllib_request.urlopen(req, timeout=8) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except (URLError, HTTPError, TimeoutError, json.JSONDecodeError):
-        return None
+            with urllib_request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                
+            if "error" in data:
+                error_msg = data['error'].get('message', 'Error')
+                logger.warning(f"Model {model_name}: {error_msg}")
+                continue
+                
+            candidates = data.get("candidates") or []
+            if not candidates:
+                continue
 
-    candidates = data.get("candidates") or []
-    if not candidates:
-        return ""
-
-    parts = (
-        candidates[0]
-        .get("content", {})
-        .get("parts", [])
-    )
-    return " ".join((p.get("text", "") for p in parts if isinstance(p, dict))).strip()
+            parts = candidates[0].get("content", {}).get("parts", [])
+            text = " ".join((p.get("text", "") for p in parts if isinstance(p, dict))).strip()
+            logger.info(f"REST emotion detection successful with {model_name}")
+            return text, True
+        except Exception as e:
+            logger.debug(f"Model {model_name} failed: {e}")
+            continue
+    
+    logger.debug("REST API models failed - using keyword fallback")
+    return None, False
 
 
 def detect_emotion(text):
+    """
+    Detect emotion from text using AI first, then keyword fallback.
+    Returns: (emotion_label, emoji, source)
+    source can be: "ai", "keyword", "empty", or "ai_unavailable"
+    """
     if not text or not text.strip():
         return "neutral", EMOTION_EMOJI_MAP["neutral"], "empty"
 
@@ -155,25 +217,39 @@ def detect_emotion(text):
         f"Message: {text}"
     )
 
-    try:
-        # Prefer official SDK when available, fallback to direct REST call when SDK is blocked.
-        raw = _detect_with_gemini_sdk(prompt)
-        if raw is None:
-            raw = _detect_with_gemini_rest(prompt)
+    # Try SDK first
+    raw, sdk_success = _detect_with_gemini_sdk(prompt)
+    
+    # If SDK failed, try REST API
+    if not sdk_success:
+        raw, rest_success = _detect_with_gemini_rest(prompt)
+    else:
+        rest_success = False
+
+    # If AI detection succeeded (either SDK or REST)
+    if sdk_success or rest_success:
         label = _extract_emotion_from_raw(raw, "")
-        if label in EMOTION_EMOJI_MAP:
+        if label and label in EMOTION_EMOJI_MAP:
+            logger.info(f"AI emotion detection successful: {label}")
             return label, EMOTION_EMOJI_MAP[label], "ai"
-    except Exception:
-        pass
+        else:
+            logger.warning(f"AI returned invalid emotion: {label}")
 
-    if not GEMINI_API_KEY:
-        return "neutral", EMOTION_EMOJI_MAP["neutral"], "ai_unavailable"
-
-    return "neutral", EMOTION_EMOJI_MAP["neutral"], "ai_failed"
+    # AI did not return a usable result, so fall back to keywords.
+    keyword_emotion = _keyword_emotion(text)
+    return keyword_emotion, EMOTION_EMOJI_MAP[keyword_emotion], "keyword"
 
 
 def generate_summary(chat_text):
+    """Generate summary using Gemini AI."""
+    global model
+    
+    # Try to initialize if not already done
     if model is None:
+        model = _initialize_model()
+    
+    if model is None:
+        logger.error("Gemini model not available for summary generation")
         return "Summary service is currently unavailable."
 
     prompt = f"""
@@ -181,5 +257,9 @@ def generate_summary(chat_text):
     {chat_text}
     """
 
-    response = model.generate_content(prompt)
-    return response.text
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        logger.error(f"Error generating summary: {e}")
+        return "Summary generation failed. Please try again later."

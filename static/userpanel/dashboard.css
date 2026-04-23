@@ -340,6 +340,60 @@
     text-shadow: 0 2px 18px rgba(56, 189, 248, 0.18);
 }
 
+.brand-logo-spin {
+    animation: brandLogoRotate 4s linear infinite;
+    filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.35));
+}
+
+@keyframes brandLogoRotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.brand-typing {
+    display: inline-block;
+    white-space: nowrap;
+    clip-path: inset(0 100% 0 0);
+    animation: brandTypeWriter 3.2s ease-in-out infinite;
+}
+
+.brand-typing::after {
+    content: "|";
+    display: inline-block;
+    margin-left: 3px;
+    color: rgba(186, 230, 253, 0.95);
+    animation: brandCursorBlink 0.9s step-end infinite;
+}
+
+@keyframes brandTypeWriter {
+    0%,
+    12% {
+        clip-path: inset(0 100% 0 0);
+    }
+    45%,
+    72% {
+        clip-path: inset(0 0 0 0);
+    }
+    100% {
+        clip-path: inset(0 100% 0 0);
+    }
+}
+
+@keyframes brandCursorBlink {
+    0%,
+    49% {
+        opacity: 1;
+    }
+    50%,
+    100% {
+        opacity: 0;
+    }
+}
+
 .avatar-thumb {
     image-rendering: auto;
     transform: translateZ(0);
