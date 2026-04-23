@@ -20,4 +20,5 @@ urlpatterns = [
     path('edit-message/', views.edit_message, name='edit_message'),
     path('delete-message/', views.delete_message, name='delete_message'),
     path('summarize-chat/', views.summarize_chat, name='summarize_chat'),
+    path('detect-emotion/', views.detect_message_emotion, name='detect_message_emotion'),
 ]

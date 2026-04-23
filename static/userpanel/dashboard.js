@@ -6,6 +6,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const userListContainer = document.getElementById("user-list-container");
     if (!searchInput || !userListContainer) return;
 
+    const DEFAULT_AVATAR = "https://i.pravatar.cc/150?img=12";
+
     // Build user list from DOM (for initial render)
     allUsers = Array.from(userListContainer.querySelectorAll(".user-item")).map(item => {
         return {
@@ -43,10 +45,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function userHtml(u) {
         const activeUserId = new URLSearchParams(window.location.search).get('user');
+        const avatarUrl = u.avatar_url || DEFAULT_AVATAR;
+        const statusMarkup = u.is_online ? `<span class="user-status text-xs text-green-400">● online</span>` : `<span class="user-status text-xs text-green-400"></span>`;
         return `<a href="/dashboard/?user=${u.id}">
             <div class="user-item flex justify-between items-center px-4 py-3 hover:bg-gray-800 cursor-pointer transition${(String(activeUserId) === String(u.id)) ? ' bg-gray-800' : ''}" data-name="${u.nameLower}" data-user-id="${u.id}" data-has-chat="${u.has_chat}" data-avatar-url="${u.avatar_url || ''}">
                 <div class="flex items-center gap-3">
-                    <img src="${u.avatar_url || 'https://i.pravatar.cc/35?u=' + encodeURIComponent(u.id)}" class="rounded-full h-9 w-9 object-cover">
+                    <img src="${avatarUrl}" data-full-src="${avatarUrl}" onclick="return window.openAvatarPreviewFromElement ? window.openAvatarPreviewFromElement(this, event) : false;" class="js-avatar-preview avatar-thumb rounded-full h-10 w-10 object-cover object-center border border-slate-500/60" alt="Profile picture">
                     <div>
                         <p class="font-medium">${u.name}</p>
                         <p class="text-xs text-gray-400 truncate w-32">${u.last_message}</p>
@@ -54,7 +58,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 </div>
                 <div class="flex flex-col items-end gap-1">
                     ${u.unread_count > 0 ? `<span class="bg-green-500 text-xs px-2 py-0.5 rounded-full">${u.unread_count}</span>` : ''}
-                    <span class="user-status text-xs ${u.is_online ? 'text-green-400' : 'text-gray-500'}">● ${u.is_online ? 'online' : 'offline'}</span>
+                    ${statusMarkup}
                 </div>
             </div>
         </a>`;
@@ -115,8 +119,28 @@ let allUsers = [];
 let renderUserList = function () {};
 let isBlockedByCurrentUser = false;
 let isReportedByChatUser = false;
+let emotionDetectionEnabled = false;
+let emotionServiceWarningShown = false;
+
+const EMOTION_STORAGE_PREFIX = "charchadesk_emotion_detection_";
+const EMOTION_EMOJI_MAP = {
+    happy: "😊",
+    sad: "😢",
+    angry: "😠",
+    fear: "😨",
+    surprised: "😮",
+    love: "❤️",
+    neutral: "😐"
+};
+
+window.openAvatarPreviewFromElement = window.openAvatarPreviewFromElement || function () {
+    return false;
+};
+
+window.bindAvatarPreviewHandlers = window.bindAvatarPreviewHandlers || function () {};
 
 function setComposerDisabled(disabled, reasonMessage = "") {
+        window.bindAvatarPreviewHandlers();
     const input = document.getElementById("message-input");
     const sendButton = document.getElementById("send-button");
     const form = document.getElementById("composer-form");
@@ -204,16 +228,16 @@ function formatDateLabel(dateValue) {
     });
 }
 
-function ensureDateSeparator(chatBox, dateValue) {
+function ensureDateSeparator(chatBox, dateValue, dateKeyOverride = "", dateLabelOverride = "") {
     if (!chatBox) return;
     const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const key = dateKeyOverride || `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     const last = chatBox.dataset.lastDate || '';
     if (last === key) return;
 
     const separator = document.createElement('div');
     separator.className = 'date-separator';
-    separator.textContent = formatDateLabel(date);
+    separator.textContent = dateLabelOverride || formatDateLabel(date);
     chatBox.appendChild(separator);
     chatBox.dataset.lastDate = key;
 }
@@ -231,10 +255,48 @@ function getChatDisplayName() {
     return document.getElementById("chat-title")?.textContent?.trim() || "Chat";
 }
 
-function renderTextMessageCard({ messageId, messageText, isOwn, timeText, labelText = "", showActions = false, showTick = false, isRead = false }) {
+function getEmotionStorageKey() {
+    const chatUserId = document.getElementById("chat-user-id")?.value;
+    if (!chatUserId) return "";
+    return `${EMOTION_STORAGE_PREFIX}${chatUserId}`;
+}
+
+function loadEmotionDetectionPreference() {
+    const key = getEmotionStorageKey();
+    if (!key) {
+        emotionDetectionEnabled = false;
+        return;
+    }
+    emotionDetectionEnabled = localStorage.getItem(key) === "1";
+}
+
+function saveEmotionDetectionPreference(enabled) {
+    const key = getEmotionStorageKey();
+    if (!key) return;
+    localStorage.setItem(key, enabled ? "1" : "0");
+}
+
+function setEmotionButtonUI() {
+    const btn = document.getElementById("chat-emotion-btn");
+    if (!btn) return;
+    btn.textContent = emotionDetectionEnabled
+        ? "🧠 Emotion Detection: On"
+        : "🧠 Emotion Detection: Off";
+}
+
+function renderEmotionBadge(emotion, emoji) {
+    const label = (emotion || "neutral").toLowerCase();
+    const icon = emoji || EMOTION_EMOJI_MAP[label] || EMOTION_EMOJI_MAP.neutral;
+    return `<div class="message-emotion" title="${escapeHtml(label)}"><span>${escapeHtml(icon)}</span></div>`;
+}
+
+function renderTextMessageCard({ messageId, messageText, isOwn, timeText, labelText = "", showActions = false, showTick = false, isRead = false, emotion = "", emotionEmoji = "" }) {
     const safeMessage = escapeHtml(messageText);
     const safeLabel = escapeHtml(labelText || getChatDisplayName());
     const canShowActions = showActions && !!messageId;
+    const emotionMarkup = (!isOwn && emotion)
+        ? renderEmotionBadge(emotion, emotionEmoji)
+        : "";
     const actionsMarkup = canShowActions
         ? `<div class="message-actions"><button type="button" class="message-action-btn js-edit-message" data-message-id="${messageId}" data-message-text="${safeMessage}">Edit</button><button type="button" class="message-action-btn js-delete-message" data-message-id="${messageId}">Delete</button></div>`
         : "";
@@ -247,6 +309,7 @@ function renderTextMessageCard({ messageId, messageText, isOwn, timeText, labelT
             <div class="${isOwn ? "msg-own" : "msg-other"} p-3 rounded-2xl shadow-sm max-w-xs relative message-bubble ${isOwn ? "message-own" : "message-other"}" data-message-id="${messageId}">
                 <div class="message-label">${isOwn ? "You" : safeLabel}</div>
                 <div class="message-content">${safeMessage}</div>
+                ${emotionMarkup}
                 ${actionsMarkup}
                 ${footerMarkup}
             </div>
@@ -254,15 +317,93 @@ function renderTextMessageCard({ messageId, messageText, isOwn, timeText, labelT
     `;
 }
 
-function appendMessageMarkup(chatBox, markup, dateValue) {
-    ensureDateSeparator(chatBox, dateValue);
+function appendMessageMarkup(chatBox, markup, dateValue, dateMeta = {}) {
+    ensureDateSeparator(chatBox, dateValue, dateMeta.dateKey, dateMeta.dateLabel);
     const wrapper = document.createElement("div");
     wrapper.innerHTML = markup.trim();
     const element = wrapper.firstElementChild;
     if (element) {
         chatBox.appendChild(element);
         chatBox.scrollTop = chatBox.scrollHeight;
+        return element;
     }
+    return null;
+}
+
+function attachEmotionBadge(rowNode, emotion, emoji) {
+    if (!rowNode) return;
+    const bubble = rowNode.querySelector(".message-bubble");
+    if (!bubble) return;
+
+    let badge = bubble.querySelector(".message-emotion");
+    if (!badge) {
+        badge = document.createElement("div");
+        badge.className = "message-emotion";
+        const actions = bubble.querySelector(".message-actions");
+        if (actions) {
+            bubble.insertBefore(badge, actions);
+        } else {
+            bubble.appendChild(badge);
+        }
+    }
+
+    const label = (emotion || "neutral").toLowerCase();
+    const icon = emoji || EMOTION_EMOJI_MAP[label] || EMOTION_EMOJI_MAP.neutral;
+    badge.innerHTML = `<span title="${escapeHtml(label)}">${escapeHtml(icon)}</span>`;
+}
+
+function detectEmotionForMessage(messageText, rowNode) {
+    if (!emotionDetectionEnabled) return;
+    if (!messageText || !messageText.trim()) return;
+    const receiverId = document.getElementById("chat-user-id")?.value;
+    if (!receiverId || !rowNode) return;
+
+    const body = new URLSearchParams();
+    body.append("user_id", receiverId);
+    body.append("message", messageText);
+
+    fetch("/detect-emotion/", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRFToken": getCSRFToken()
+        },
+        body
+    })
+        .then(async (response) => {
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (_) {
+                data = {};
+            }
+
+            if (!response.ok || data.error) {
+                return;
+            }
+
+            if (data.source && data.source !== "ai" && data.source !== "empty") {
+                if (!emotionServiceWarningShown) {
+                    emotionServiceWarningShown = true;
+                    showNotification("Emotion AI unavailable. Configure Gemini API to use AI understanding.");
+                }
+                return;
+            }
+
+            attachEmotionBadge(rowNode, data.emotion, data.emoji);
+        })
+        .catch(() => {
+            // Keep chat responsive even if emotion service fails.
+        });
+}
+
+function detectEmotionForExistingMessages() {
+    if (!emotionDetectionEnabled) return;
+    document.querySelectorAll(".message-row-other").forEach((rowNode) => {
+        const messageText = rowNode.querySelector(".message-content")?.textContent || "";
+        if (!messageText.trim()) return;
+        detectEmotionForMessage(messageText, rowNode);
+    });
 }
 
 function updateMessageCard(messageId, newText) {
@@ -353,11 +494,11 @@ function connectSocket(userId) {
                 let statusEl = u.querySelector(".user-status");
                 if (!statusEl) return;
                 if (data.online_users.map(String).includes(String(uid))) {
-                    statusEl.innerText = "● online";
+                    statusEl.textContent = "● online";
                     statusEl.className = "user-status text-green-400 text-xs";
                 } else {
-                    statusEl.innerText = "● offline";
-                    statusEl.className = "user-status text-gray-500 text-xs";
+                    statusEl.textContent = "";
+                    statusEl.className = "user-status text-green-400 text-xs";
                 }
             });
             return;
@@ -397,6 +538,11 @@ function connectSocket(userId) {
         if (data.type === "message") {
             const incomingSenderId = String(data.sender_id ?? data.sender ?? "");
             const messageDate = data.timestamp ? new Date(data.timestamp) : new Date();
+            const timeText = data.time_label || formatMessageTime(messageDate);
+            const dateMeta = {
+                dateKey: data.date_key || "",
+                dateLabel: data.date_label || "",
+            };
 
             // 🔊 SOUND + NOTIFICATION (only if other user)
             if (incomingSenderId !== String(currentUserId)) {
@@ -420,27 +566,28 @@ function connectSocket(userId) {
                     messageId: data.msg_id,
                     messageText: data.message,
                     isOwn: true,
-                    timeText: formatMessageTime(messageDate),
+                    timeText,
                     labelText: "You",
                     showActions: true,
                     showTick: true,
                     isRead: false,
-                }), messageDate);
+                }), messageDate, dateMeta);
 
                 if (data.local_only) {
                     showNotification("This message is visible only to you.");
                 }
 
             } else {
-                appendMessageMarkup(chatBox, renderTextMessageCard({
+                const rowNode = appendMessageMarkup(chatBox, renderTextMessageCard({
                     messageId: data.msg_id,
                     messageText: data.message,
                     isOwn: false,
-                    timeText: formatMessageTime(messageDate),
+                    timeText,
                     labelText: data.sender_name || getChatDisplayName(),
                     showActions: false,
                     showTick: false,
-                }), messageDate);
+                }), messageDate, dateMeta);
+                detectEmotionForMessage(data.message, rowNode);
             }
         }
     };
@@ -525,6 +672,11 @@ function sendMessage(e) {
 function appendFileMessage(data, isOwn) {
     let chatBox = document.getElementById("chat-box");
     const messageDate = data.timestamp ? new Date(data.timestamp) : new Date();
+    const timeText = data.time_label || formatMessageTime(messageDate);
+    const dateMeta = {
+        dateKey: data.date_key || "",
+        dateLabel: data.date_label || "",
+    };
     const canEditOrDelete = !!data.message_id;
     let fileHtml = "";
     if (data.file_url) {
@@ -548,12 +700,15 @@ function appendFileMessage(data, isOwn) {
                 ${data.message ? `<div class="message-content">${escapeHtml(data.message)}</div>` : ""}
                 ${isOwn && canEditOrDelete ? `<div class="message-actions"><button type="button" class="message-action-btn js-edit-message" data-message-id="${data.message_id}" data-message-text="${escapeHtml(data.message || '')}">Edit</button><button type="button" class="message-action-btn js-delete-message" data-message-id="${data.message_id}">Delete</button></div>` : ""}
                 ${isOwn
-                    ? `<div class="text-[11px] text-right mt-1 opacity-85 tick tick-thin"><span class="tick-mark">✓</span><span class="message-time">${formatMessageTime(messageDate)}</span></div>`
-                    : `<div class="text-[11px] text-right mt-1 text-slate-500 message-time">${formatMessageTime(messageDate)}</div>`}
+                    ? `<div class="text-[11px] text-right mt-1 opacity-85 tick tick-thin"><span class="tick-mark">✓</span><span class="message-time">${timeText}</span></div>`
+                    : `<div class="text-[11px] text-right mt-1 text-slate-500 message-time">${timeText}</div>`}
             </div>
         </div>
     `;
-    appendMessageMarkup(chatBox, markup, messageDate);
+    const rowNode = appendMessageMarkup(chatBox, markup, messageDate, dateMeta);
+    if (!isOwn && data.message) {
+        detectEmotionForMessage(data.message, rowNode);
+    }
 }
 
 function getCSRFToken() {
@@ -598,6 +753,86 @@ document.addEventListener("DOMContentLoaded", function () {
 
     });
 
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    let modal = document.getElementById("avatar-modal");
+    let modalImage = document.getElementById("avatar-modal-image");
+    let closeBtn = document.getElementById("avatar-modal-close");
+
+    // Fallback: if modal markup is missing, create it dynamically.
+    if (!modal || !modalImage) {
+        const wrapper = document.createElement("div");
+        wrapper.id = "avatar-modal";
+        wrapper.className = "avatar-modal hidden";
+        wrapper.setAttribute("role", "dialog");
+        wrapper.setAttribute("aria-modal", "true");
+        wrapper.setAttribute("aria-label", "Profile picture preview");
+        wrapper.innerHTML = `
+            <button id="avatar-modal-close" type="button" class="avatar-modal-close" aria-label="Close profile picture preview">&times;</button>
+            <img id="avatar-modal-image" src="" alt="Full profile picture" class="avatar-modal-image" />
+        `;
+        document.body.appendChild(wrapper);
+        modal = document.getElementById("avatar-modal");
+        modalImage = document.getElementById("avatar-modal-image");
+        closeBtn = document.getElementById("avatar-modal-close");
+    }
+
+    function openAvatarModal(src) {
+        if (!src) return;
+        modalImage.src = src;
+        modal.classList.remove("hidden");
+        document.body.classList.add("overflow-hidden");
+    }
+
+    window.openAvatarPreviewFromElement = function (el, event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        if (!el) return false;
+        const src = el.getAttribute("data-full-src") || el.getAttribute("src");
+        openAvatarModal(src);
+        return false;
+    };
+
+    window.bindAvatarPreviewHandlers = function () {
+        document.querySelectorAll(".js-avatar-preview").forEach(function (avatar) {
+            avatar.onclick = function (event) {
+                return window.openAvatarPreviewFromElement(avatar, event);
+            };
+        });
+    };
+
+    window.bindAvatarPreviewHandlers();
+
+    function closeAvatarModal() {
+        modal.classList.add("hidden");
+        modalImage.src = "";
+        document.body.classList.remove("overflow-hidden");
+    }
+
+    document.addEventListener("click", function (e) {
+        const avatar = e.target.closest(".js-avatar-preview");
+        if (!avatar) return;
+        window.openAvatarPreviewFromElement(avatar, e);
+    }, true);
+
+    if (closeBtn) {
+        closeBtn.addEventListener("click", closeAvatarModal);
+    }
+
+    modal.addEventListener("click", function (e) {
+        if (e.target === modal) {
+            closeAvatarModal();
+        }
+    });
+
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+            closeAvatarModal();
+        }
+    });
 });
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -801,9 +1036,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const blockBtn = document.getElementById("chat-block-btn");
     const deleteBtn = document.getElementById("chat-delete-btn");
     const reportBtn = document.getElementById("chat-report-btn");
+    const emotionBtn = document.getElementById("chat-emotion-btn");
 
     isBlockedByCurrentUser = blockBtn?.getAttribute("data-is-blocked") === "true";
     syncBlockButtonUI();
+    loadEmotionDetectionPreference();
+    setEmotionButtonUI();
+    detectEmotionForExistingMessages();
 
     if (accountMenu) {
         accountMenu.addEventListener("click", function (e) {
@@ -908,6 +1147,20 @@ document.addEventListener("DOMContentLoaded", function () {
                     window.location.reload();
                 })
                 .catch(() => showNotification("Delete chat failed"));
+        });
+    }
+
+    if (emotionBtn) {
+        emotionBtn.addEventListener("click", function () {
+            emotionDetectionEnabled = !emotionDetectionEnabled;
+            saveEmotionDetectionPreference(emotionDetectionEnabled);
+            setEmotionButtonUI();
+            if (emotionDetectionEnabled) {
+                detectEmotionForExistingMessages();
+                showNotification("Emotion detection enabled");
+            } else {
+                showNotification("Emotion detection disabled");
+            }
         });
     }
 });

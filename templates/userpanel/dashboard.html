@@ -5,7 +5,7 @@
     <title>CharchaDesk</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="{% static 'userpanel/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'userpanel/dashboard.css' %}?v=20260423c">
 </head>
 
 <body class="bg-slate-950 text-slate-900">
@@ -22,9 +22,9 @@
         <!-- PROFILE -->
         <div class="p-4 border-b border-white/10 flex items-center gap-3 bg-white/5">
             {% if user.profile_picture %}
-                <img id="current-user-avatar" src="{{ user.profile_picture.url }}" class="rounded-full h-10 w-10 object-cover border border-gray-500">
+                <img id="current-user-avatar" src="{{ user.profile_picture.url }}" data-full-src="{{ user.profile_picture.url }}" onclick="return window.openAvatarPreviewFromElement ? window.openAvatarPreviewFromElement(this, event) : false;" class="js-avatar-preview avatar-thumb rounded-full h-11 w-11 object-cover object-center border border-slate-400/70" alt="Profile picture">
             {% else %}
-                <img id="current-user-avatar" src="https://i.pravatar.cc/40?u={{ user.email }}" class="rounded-full h-10 w-10 object-cover border border-gray-500">
+                <img id="current-user-avatar" src="https://i.pravatar.cc/150?img=12" data-full-src="https://i.pravatar.cc/150?img=12" onclick="return window.openAvatarPreviewFromElement ? window.openAvatarPreviewFromElement(this, event) : false;" class="js-avatar-preview avatar-thumb rounded-full h-11 w-11 object-cover object-center border border-slate-400/70" alt="Profile picture">
             {% endif %}
             <div class="flex-1">
                 <h2 id="current-user-name" class="font-semibold">{{ user.name }}</h2>
@@ -57,9 +57,9 @@
             <!-- LEFT -->
             <div class="flex items-center gap-3">
                 {% if u.profile_picture_url %}
-                    <img src="{{ u.profile_picture_url }}" class="rounded-full h-9 w-9 object-cover">
+                    <img src="{{ u.profile_picture_url }}" data-full-src="{{ u.profile_picture_url }}" onclick="return window.openAvatarPreviewFromElement ? window.openAvatarPreviewFromElement(this, event) : false;" class="js-avatar-preview avatar-thumb rounded-full h-10 w-10 object-cover object-center border border-slate-500/60" alt="{{ u.name }} profile picture">
                 {% else %}
-                    <img src="https://i.pravatar.cc/35?u={{ u.email }}" class="rounded-full h-9 w-9 object-cover">
+                    <img src="https://i.pravatar.cc/150?img=12" data-full-src="https://i.pravatar.cc/150?img=12" onclick="return window.openAvatarPreviewFromElement ? window.openAvatarPreviewFromElement(this, event) : false;" class="js-avatar-preview avatar-thumb rounded-full h-10 w-10 object-cover object-center border border-slate-500/60" alt="Default profile picture">
                 {% endif %}
                 <div>
                     <p class="font-medium">{{ u.name }}</p>
@@ -72,7 +72,7 @@
                 <span class="bg-green-500 text-xs px-2 py-0.5 rounded-full">{{ u.unread_count }}</span>
                 {% endif %}
                 <!-- ✅ REALTIME STATUS -->
-                <span class="user-status text-xs {% if u.is_online %}text-green-400{% else %}text-slate-500{% endif %}">● {% if u.is_online %}online{% else %}offline{% endif %}</span>
+                <span class="user-status text-xs text-green-400">{% if u.is_online %}● online{% endif %}</span>
             </div>
         </div>
     </a>
@@ -127,6 +127,7 @@
                     <a href="{% url 'view_profile' other_user.id %}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">
                         👤 View Profile
                     </a>
+                    <button id="chat-emotion-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">🧠 Emotion Detection: Off</button>
                     <button id="chat-block-btn" type="button" data-user-id="{{ other_user.id }}" data-is-blocked="{% if blocked_by_current %}true{% else %}false{% endif %}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">{% if blocked_by_current %}✅ Unblock{% else %}🚫 Block{% endif %}</button>
                     <button id="chat-report-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left">⚠️ Report</button>
                     <button id="chat-delete-btn" type="button" data-user-id="{{ other_user.id }}" class="block w-full px-4 py-2 hover:bg-slate-100 text-left text-red-500">🗑 Delete Chat</button>
@@ -299,6 +300,11 @@
 
 </div>
 
+<div id="avatar-modal" class="avatar-modal hidden" role="dialog" aria-modal="true" aria-label="Profile picture preview">
+    <button id="avatar-modal-close" type="button" class="avatar-modal-close" aria-label="Close profile picture preview">&times;</button>
+    <img id="avatar-modal-image" src="" alt="Full profile picture" class="avatar-modal-image" />
+</div>
+
 {% if other_user and other_user.id %}
 <div id="summary-modal" class="hidden fixed inset-0 z-[70] bg-black/50 p-4">
     <div class="summary-modal-card mx-auto mt-10 w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
@@ -359,7 +365,75 @@
 <!-- 🔊 SOUND -->
 <audio id="msg-sound" src="{% static 'userpanel/notify.mp3' %}"></audio>
 
-<script src="{% static 'userpanel/dashboard.js' %}"></script>
+<script src="{% static 'userpanel/dashboard.js' %}?v=20260423f"></script>
+<script>
+    (function () {
+        function ensureAvatarModal() {
+            let modal = document.getElementById("avatar-modal");
+            let image = document.getElementById("avatar-modal-image");
+            let close = document.getElementById("avatar-modal-close");
+
+            if (!modal || !image) {
+                const wrapper = document.createElement("div");
+                wrapper.id = "avatar-modal";
+                wrapper.className = "avatar-modal hidden";
+                wrapper.setAttribute("role", "dialog");
+                wrapper.setAttribute("aria-modal", "true");
+                wrapper.setAttribute("aria-label", "Profile picture preview");
+                wrapper.innerHTML = '<button id="avatar-modal-close" type="button" class="avatar-modal-close" aria-label="Close profile picture preview">&times;</button><img id="avatar-modal-image" src="" alt="Full profile picture" class="avatar-modal-image" />';
+                document.body.appendChild(wrapper);
+                modal = document.getElementById("avatar-modal");
+                image = document.getElementById("avatar-modal-image");
+                close = document.getElementById("avatar-modal-close");
+            }
+
+            function closeModal() {
+                modal.classList.add("hidden");
+                image.src = "";
+                document.body.classList.remove("overflow-hidden");
+            }
+
+            if (!modal.dataset.avatarBound) {
+                modal.dataset.avatarBound = "1";
+                if (close) {
+                    close.addEventListener("click", closeModal);
+                }
+                modal.addEventListener("click", function (e) {
+                    if (e.target === modal) closeModal();
+                });
+                document.addEventListener("keydown", function (e) {
+                    if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+                        closeModal();
+                    }
+                });
+            }
+
+            return { modal: modal, image: image };
+        }
+
+        window.openAvatarPreviewFromElement = function (el, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            if (!el) return false;
+            const src = el.getAttribute("data-full-src") || el.getAttribute("src");
+            if (!src) return false;
+
+            const refs = ensureAvatarModal();
+            refs.image.src = src;
+            refs.modal.classList.remove("hidden");
+            document.body.classList.add("overflow-hidden");
+            return false;
+        };
+
+        document.addEventListener("click", function (e) {
+            const avatar = e.target.closest(".js-avatar-preview");
+            if (!avatar) return;
+            window.openAvatarPreviewFromElement(avatar, e);
+        }, true);
+    })();
+</script>
 
 </body>
 </html>

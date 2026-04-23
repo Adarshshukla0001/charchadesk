@@ -118,18 +118,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if await self.is_receiver_blocking_sender():
             sender = await self.get_current_user()
+            now_local = timezone.localtime(timezone.now())
             await self.send(text_data=json.dumps({
                 'type': 'message',
                 'message': message,
                 'sender_id': self.current_user_id,
                 'sender_name': sender.name,
-                'timestamp': timezone.now().isoformat(),
+                'timestamp': now_local.isoformat(),
+                'time_label': now_local.strftime('%I:%M %p').lstrip('0'),
+                'date_key': now_local.strftime('%Y-%m-%d'),
+                'date_label': now_local.strftime('%a, %d %b %Y'),
                 'msg_id': None,
                 'local_only': True,
             }))
             return
 
         msg = await self.save_message(message)
+        msg_local = timezone.localtime(msg.timestamp)
 
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -138,7 +143,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'message': msg.message,
                 'sender_id': msg.sender_id,
                 'sender_name': msg.sender.name,
-                'timestamp': msg.timestamp.isoformat(),
+                'timestamp': msg_local.isoformat(),
+                'time_label': msg_local.strftime('%I:%M %p').lstrip('0'),
+                'date_key': msg_local.strftime('%Y-%m-%d'),
+                'date_label': msg_local.strftime('%a, %d %b %Y'),
                 'msg_id': msg.id
             }
         )
@@ -153,6 +161,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'sender_id': event['sender_id'],
             'sender_name': event.get('sender_name', ''),
             'timestamp': event.get('timestamp'),
+            'time_label': event.get('time_label', ''),
+            'date_key': event.get('date_key', ''),
+            'date_label': event.get('date_label', ''),
             'msg_id': event['msg_id']
         }))
 

@@ -123,6 +123,35 @@
     opacity: 0.7;
 }
 
+.message-emotion {
+    margin-top: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+}
+
+.message-emotion span {
+    font-size: 24px;
+    line-height: 1;
+    display: inline-block;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+}
+
+.message-own .message-emotion {
+    background: rgba(255, 255, 255, 0.17);
+    color: #e2e8f0;
+}
+
+.message-other .message-emotion {
+    background: #e0f2fe;
+    color: #0c4a6e;
+    border: 1px solid #bae6fd;
+}
+
 .date-separator {
     margin: 10px auto;
     width: fit-content;
@@ -309,4 +338,64 @@
     background-clip: text;
     color: transparent;
     text-shadow: 0 2px 18px rgba(56, 189, 248, 0.18);
+}
+
+.avatar-thumb {
+    image-rendering: auto;
+    transform: translateZ(0);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 10px rgba(2, 6, 23, 0.25);
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+    cursor: pointer;
+}
+
+.avatar-thumb:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.4), 0 8px 18px rgba(2, 6, 23, 0.35);
+}
+
+.avatar-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgba(2, 6, 23, 0.82);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.avatar-modal.hidden {
+    display: none !important;
+}
+
+.avatar-modal-image {
+    max-width: min(92vw, 680px);
+    max-height: 88vh;
+    width: auto;
+    height: auto;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 26px 70px rgba(2, 6, 23, 0.6);
+    background: #0f172a;
+    object-fit: contain;
+}
+
+.avatar-modal-close {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: 999px;
+    font-size: 26px;
+    line-height: 1;
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.75);
+    cursor: pointer;
+}
+
+.avatar-modal-close:hover {
+    background: rgba(30, 41, 59, 0.92);
 }

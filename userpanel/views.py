@@ -11,6 +11,7 @@ from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from .utils import build_chat_transcript, summarize_chat_with_gemini, to_aware_datetime
+from .services.ai_service import detect_emotion
 
 
 from .models import User, Message, BlockedUser, ReportedUser
@@ -371,6 +372,7 @@ def send_message(request):
 
     # If receiver blocked sender, allow local send feel but do not deliver/store.
     if BlockedUser.objects.filter(blocker=receiver, blocked=sender).exists():
+        now_local = timezone.localtime(timezone.now())
         if file:
             return JsonResponse({'error': 'Blocked user: file cannot be delivered.'}, status=403)
         return JsonResponse({
@@ -379,7 +381,10 @@ def send_message(request):
             'sender': sender.name,
             'file_url': None,
             'file_name': None,
-            'timestamp': timezone.now().isoformat(),
+            'timestamp': now_local.isoformat(),
+            'time_label': now_local.strftime('%I:%M %p').lstrip('0'),
+            'date_key': now_local.strftime('%Y-%m-%d'),
+            'date_label': now_local.strftime('%a, %d %b %Y'),
             'local_only': True,
             'status': 'ok',
         })
@@ -390,6 +395,7 @@ def send_message(request):
         message=text,
         file=file if file else None
     )
+    msg_local = timezone.localtime(msg.timestamp)
 
     file_url = msg.file.url if msg.file else None
     file_name = msg.file.name if msg.file else None
@@ -400,7 +406,10 @@ def send_message(request):
         'sender': sender.name,
         'file_url': file_url,
         'file_name': file_name,
-        'timestamp': msg.timestamp.isoformat(),
+        'timestamp': msg_local.isoformat(),
+        'time_label': msg_local.strftime('%I:%M %p').lstrip('0'),
+        'date_key': msg_local.strftime('%Y-%m-%d'),
+        'date_label': msg_local.strftime('%a, %d %b %Y'),
         'local_only': False,
     })
 
@@ -601,3 +610,39 @@ def summarize_chat(request):
     summary = summarize_chat_with_gemini(transcript, language=language)
 
     return JsonResponse({'summary': summary})
+
+
+@require_POST
+def detect_message_emotion(request):
+    if 'user_id' not in request.session:
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+
+    current_user_id = request.session['user_id']
+    chat_user_id = request.POST.get('user_id')
+    message_text = (request.POST.get('message') or '').strip()
+
+    if not chat_user_id:
+        return JsonResponse({'error': 'Chat user is required'}, status=400)
+
+    try:
+        current_user = User.objects.get(id=current_user_id)
+        other_user = User.objects.get(id=chat_user_id)
+    except User.DoesNotExist:
+        return JsonResponse({'error': 'User not found'}, status=404)
+
+    # Ensure request is made for an actual chat participant context.
+    has_any_chat = Message.objects.filter(
+        sender__in=[current_user, other_user],
+        receiver__in=[current_user, other_user],
+    ).exists()
+
+    if not has_any_chat and str(current_user.id) == str(other_user.id):
+        return JsonResponse({'error': 'Invalid chat user'}, status=400)
+
+    emotion_label, emotion_emoji, source = detect_emotion(message_text)
+
+    return JsonResponse({
+        'emotion': emotion_label,
+        'emoji': emotion_emoji,
+        'source': source,
+    })
