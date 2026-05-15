@@ -79,28 +79,6 @@ document.addEventListener("DOMContentLoaded", function () {
 document.addEventListener("DOMContentLoaded", function () {
     const currentUserField = document.getElementById("current-user-id");
     if (!currentUserField?.value) return;
-
-    const AUTO_LOGOUT_MS = 60 * 60 * 1000;
-    const loginKey = `charchadesk_login_at_${currentUserField.value}`;
-    const now = Date.now();
-    const storedLoginAt = Number(localStorage.getItem(loginKey) || 0);
-    const loginAt = storedLoginAt > 0 ? storedLoginAt : now;
-
-    if (!storedLoginAt) {
-        localStorage.setItem(loginKey, String(loginAt));
-    }
-
-    const elapsed = now - loginAt;
-    const remaining = AUTO_LOGOUT_MS - elapsed;
-
-    if (remaining <= 0) {
-        window.location.href = "/logout/?reason=timeout";
-        return;
-    }
-
-    setTimeout(() => {
-        window.location.href = "/logout/?reason=timeout";
-    }, remaining);
 });
 // =========================
 // 🔥 FILE PREVIEW (overlay above input, with X button)
@@ -452,8 +430,9 @@ function connectSocket(userId) {
 
     currentUserId = currentUserField.value;
 
+    const wsScheme = window.location.protocol === "https:" ? "wss://" : "ws://";
     socket = new WebSocket(
-        'ws://' + window.location.host + '/ws/chat/' + userId + '/?user_id=' + currentUserId
+        wsScheme + window.location.host + '/ws/chat/' + userId + '/?user_id=' + currentUserId
     );
 
     // =========================
@@ -675,7 +654,57 @@ function sendMessage(e) {
 
     // If only text, use WebSocket
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-        console.log("Socket not ready");
+        if (!receiverId) {
+            showNotification("Select a user first");
+            return;
+        }
+
+        const body = new URLSearchParams();
+        body.append("receiver_id", receiverId);
+        body.append("message", message);
+
+        fetch("/send-message/", {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: body.toString()
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showNotification(data.error);
+                return;
+            }
+
+            const chatBox = document.getElementById("chat-box");
+            const messageDate = data.timestamp ? new Date(data.timestamp) : new Date();
+            const timeText = data.time_label || formatMessageTime(messageDate);
+            appendMessageMarkup(chatBox, renderTextMessageCard({
+                messageId: data.message_id,
+                messageText: data.message,
+                isOwn: true,
+                timeText,
+                labelText: "You",
+                showActions: true,
+                showTick: true,
+                isRead: false,
+            }), messageDate, {
+                dateKey: data.date_key || "",
+                dateLabel: data.date_label || "",
+            });
+
+            if (data.local_only) {
+                showNotification("This message is visible only to you.");
+            }
+
+            input.value = "";
+        })
+        .catch(() => {
+            showNotification("Message send failed");
+        });
         return;
     }
 

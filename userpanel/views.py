@@ -398,6 +398,25 @@ def send_message(request):
     )
     msg_local = timezone.localtime(msg.timestamp)
 
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        users = sorted([str(sender.id), str(receiver.id)])
+        room_group_name = f'chat_{users[0]}_{users[1]}'
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {
+                'type': 'chat_message',
+                'message': msg.message,
+                'sender_id': msg.sender_id,
+                'sender_name': sender.name,
+                'timestamp': msg_local.isoformat(),
+                'time_label': msg_local.strftime('%I:%M %p').lstrip('0'),
+                'date_key': msg_local.strftime('%Y-%m-%d'),
+                'date_label': msg_local.strftime('%a, %d %b %Y'),
+                'msg_id': msg.id,
+            }
+        )
+
     file_url = msg.file.url if msg.file else None
     file_name = msg.file.name if msg.file else None
 
